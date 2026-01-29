@@ -1,0 +1,4 @@
+.env
+venv/
+emb_cache/
+__pycache__/
