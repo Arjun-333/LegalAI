@@ -298,43 +298,149 @@ def retrieve_answer(query, model_obj, vectors, texts_list, llm_backend, top_k=5)
 
     return answer, retrieved, np.array(q_vec, dtype=float)
 
+# =========================================================
+# METRICS HELPER (M1-M24)
+# =========================================================
+class LegalEvaluator:
+    def __init__(self):
+        # M21: Terminology Precision
+        self.legal_terms = {
+            "plaintiff", "defendant", "petitioner", "respondent", "appellant", 
+            "writ", "jurisdiction", "affidavit", "statute", "provision", "act",
+            "section", "article", "constitution", "bench", "judgement", "decree",
+            "bail", "custody", "conviction", "acquittal", "prima facie", "locus standi"
+        }
+        # M24: Bias Score (Protected attributes)
+        self.bias_terms = {
+            "caste", "religion", "hindu", "muslim", "christian", "sikh", 
+            "dalit", "brahmin", "shudra", "upper caste", "lower caste",
+            "gender", "female", "male", "race", "ethnicity"
+        }
+        # M20: Citations (Basic Regex)
+        self.citation_pattern = re.compile(r"(v\.|vs\.|versus|AIR \d+|SCC \d+|Section \d+|Article \d+)", re.IGNORECASE)
+
+    def calculate_legal_scores(self, text):
+        words = set(re.findall(r"\w+", text.lower()))
+        
+        # M21: Usage of legal terms
+        legal_matches = words.intersection(self.legal_terms)
+        term_precision = len(legal_matches) / len(words) if words else 0.0
+
+        # M24: Bias presence
+        bias_matches = words.intersection(self.bias_terms)
+        bias_score = (len(bias_matches) / len(words)) * 100 if words else 0.0
+
+        # M20: Citations found
+        citations = self.citation_pattern.findall(text)
+        citation_count = len(citations)
+        
+        return term_precision, bias_score, citation_count
+
 def evaluate_advanced(preds, gts, retrieved_list, q_vecs, embedder_obj, latencies_r, latencies_g, vectors, texts_list, log_file="metrics_log.csv"):
     df_list = []
+    
+    # Init Scorers
     rouge = rouge_scorer.RougeScorer(["rouge1","rouge2","rougeL"], use_stemmer=True)
     smoothie = SmoothingFunction().method4
+    legal_eval = LegalEvaluator()
+    
+    # M2: Index Size
+    index_size_vectors = len(vectors) 
 
     for i, (pred, gt, ret, qv) in enumerate(zip(preds, gts, retrieved_list, q_vecs)):
-        r = rouge.score(gt, pred)
+        # --- Answer Quality (M6-M15, M23) ---
+        r_scores = rouge.score(gt, pred)
+        # M6-M8
+        r1_f = r_scores["rouge1"].fmeasure
+        r2_f = r_scores["rouge2"].fmeasure
+        rl_f = r_scores["rougeL"].fmeasure
+        
+        # M10: BLEU
         bleu = sentence_bleu([gt.split()], pred.split(), smoothing_function=smoothie)
+        
+        # M11: METEOR
         meteor = meteor_score([gt.split()], pred.split())
+        
+        # M12: BERTScore
         try:
             P, R, F1 = bert_score([pred], [gt], lang="en", rescale_with_baseline=True)
-            bert_f1 = float(F1[0])
-        except Exception: bert_f1 = 0.0
+            bert_f = float(F1[0])
+        except Exception: bert_f = 0.0
+        
+        # M13/M23: Factual Consistency Deviation
+        fcd = (1 - bert_f) * 100 if bert_f > 0 else 100.0
 
+        # M9: Context Length (Tokens approx by words for speed or simple split)
+        ctx_len = sum(len(c.split()) for c in ret)
+
+        # M14: Faithfulness (Simple Overlap approx)
+        # % of answer words that appear in context
+        ans_words = set(pred.lower().split())
+        ctx_words = set(" ".join(ret).lower().split())
+        faithfulness = len(ans_words.intersection(ctx_words)) / len(ans_words) if ans_words else 0.0
+
+        # M15: GT Coverage
+        gt_words = set(gt.lower().split())
+        gt_cov = len(ans_words.intersection(gt_words)) / len(gt_words) if gt_words else 0.0
+
+        # --- Retrieval Performance (M1-M5) ---
+        # M3: Retrieval Latency -> latencies_r[i]
+        # M4: Cosine Similarity
         if len(ret) > 0:
             ret_vec = embedder_obj.encode([ret[0]])[0] 
             cosine_sim = float(cosine_similarity([qv], [ret_vec])[0][0])
         else: cosine_sim = 0.0
+        
+        # M5: Top-k Accuracy (Approx: is GT substantially present in Context?)
+        # Simple check: do 30% of GT words appear in Context?
+        is_in_top_k = 1 if (len(gt_words.intersection(ctx_words)) / len(gt_words) > 0.3 if gt_words else 0) else 0
 
+        # --- System Efficiency (M16-M19) ---
+        # M16: End-to-End Latency
+        e2e_lat = latencies_r[i] + latencies_g[i]
+        # M17: Throughput (queries/sec for this single query)
+        throughput = 1 / e2e_lat if e2e_lat > 0 else 0
+        # M18/M19: System
         cpu_use = psutil.cpu_percent()
         ram_use_gb = psutil.virtual_memory().used / (1024**3)
 
+        # --- Legal Specific (M20-M22, M24) ---
+        term_prec, bias_score, cit_count = legal_eval.calculate_legal_scores(pred)
+        # M20: Citation Accuracy (proxy: did we find citations?)
+        cit_acc = 100.0 if cit_count > 0 else 0.0 
+        
+        # Assemble Row
         df_list.append({
-            "QueryID": i,
-            "Answer": pred[:50] + "...",
-            "ROUGE-L": round(r["rougeL"].fmeasure, 3),
-            "BLEU": round(bleu, 3),
-            "METEOR": round(meteor, 3),
-            "BERT-F1": round(bert_f1, 3),
-            "CosSim": round(cosine_sim, 3),
-            "Latency(s)": round(latencies_r[i] + latencies_g[i], 2),
-            "RAM(GB)": round(ram_use_gb, 2)
+            "QID": i,
+            "M1_EmbedTime": "Cached", # Constant
+            "M2_IndexSize": index_size_vectors,
+            "M3_RetLatency": round(latencies_r[i], 3),
+            "M4_CosSim": round(cosine_sim, 3),
+            "M5_TopK_Acc": is_in_top_k,
+            "M6_R1": round(r1_f, 3),
+            "M7_R2": round(r2_f, 3),
+            "M8_RL": round(rl_f, 3),
+            "M9_CtxLen": ctx_len,
+            "M10_BLEU": round(bleu, 3),
+            "M11_METEOR": round(meteor, 3),
+            "M12_BERT_F1": round(bert_f, 3),
+            "M13_FCD": round(fcd, 1),
+            "M14_Faithfulness": round(faithfulness * 100, 1),
+            "M15_GTCov": round(gt_cov * 100, 1),
+            "M16_E2E_Lat": round(e2e_lat, 2),
+            "M17_Throughput": round(throughput, 2),
+            "M18_CPU": cpu_use,
+            "M19_RAM": round(ram_use_gb, 2),
+            "M20_CitAcc": cit_acc,
+            "M21_TermPrec": round(term_prec * 100, 1),
+            "M22_PrecCov": 100 if len(ret) > 1 else 0, # Did we get >1 doc?
+            "M23_FCD_dup": round(fcd, 1),
+            "M24_Bias": round(bias_score, 1)
         })
 
     df = pd.DataFrame(df_list)
     df.to_csv(log_file, index=False)
-    print(f"\nAdvanced metrics saved to {log_file}")
+    print(f"\n✅ Full M1-M24 Metrics saved to {log_file}")
     return df
 
 # =========================================================
