@@ -155,27 +155,52 @@ def process_and_embed_incrementally(pdf_files: List[Path], model_obj):
         else:
             files_to_process.append((pdf, cpath))
 
-    # 2. Extract & Embed (Serial but Safe)
+    # 2. Extract & Embed (Auto-Switch based on OS)
     new_chunks_map = {} # path -> chunks
     
+    # Check OS: 'posix' = Linux/Mac (Parallel Safe), 'nt' = Windows (Serial Safer)
+    MAX_WORKERS = os.cpu_count() if os.name == 'posix' else 1
+    
     if files_to_process:
-        print(f"\n⚡ Extracting & Embedding {len(files_to_process)} NEW files (Serial)...")
-        
-        for pdf, cpath in tqdm(files_to_process, desc="Processing"):
-            # Extract
-            chunks = extract_chunks_from_file(str(pdf))
-            if not chunks: 
-                continue
+        if MAX_WORKERS > 1:
+            print(f"\n⚡ Parallel Extracting {len(files_to_process)} NEW files using {MAX_WORKERS} cores (Linux/Mac)...")
+            with ProcessPoolExecutor(max_workers=MAX_WORKERS) as executor:
+                future_to_file = {
+                    executor.submit(extract_chunks_from_file, str(pdf)): (pdf, cpath)
+                    for pdf, cpath in files_to_process
+                }
+                for future in tqdm(as_completed(future_to_file), total=len(files_to_process), desc="Extracting"):
+                    pdf, cpath = future_to_file[future]
+                    try:
+                        chunks = future.result()
+                        if chunks:
+                            new_chunks_map[cpath] = chunks
+                    except Exception as e:
+                        print(f"Parallel Error {pdf}: {e}")
+        else:
+            print(f"\n🐢 Serial Extracting {len(files_to_process)} NEW files (Windows Safe Mode)...")
+            for pdf, cpath in tqdm(files_to_process, desc="Extracting"):
+                chunks = extract_chunks_from_file(str(pdf))
+                if chunks:
+                    new_chunks_map[cpath] = chunks
 
-            # Embed
-            try:
-                vecs = model_obj.encode(chunks, batch_size=64, show_progress_bar=False, convert_to_numpy=True)
+    # 3. Embedding loop (chunks -> vectors)
+    # We process in batches and SAVE FREQUENTLY (Crash Recovery)
+    if new_chunks_map:
+        print(f"\n🔹 Embedding {len(new_chunks_map)} files (saving every step)...")
+        
+        keys = list(new_chunks_map.keys())
+        
+        for cpath in tqdm(keys, desc="Embedding & Saving"):
+            chunks = new_chunks_map[cpath]
+            if not chunks: continue
                 
-                # Save
-                save_file_cache(cpath, vecs, chunks)
-                cached_files.append(cpath)
-            except Exception as e:
-                print(f"Error processing {pdf.name}: {e}")
+            # Embed this file's chunks
+            vecs = model_obj.encode(chunks, batch_size=64, show_progress_bar=False, convert_to_numpy=True)
+            
+            # Save IMMEDIATELY
+            save_file_cache(cpath, vecs, chunks)
+            cached_files.append(cpath) # Mark as done
 
     # 4. Load everything from cache
 
