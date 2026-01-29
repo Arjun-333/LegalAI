@@ -1,38 +1,47 @@
-# Legal RAG Pipeline ⚖️
+# Legal RAG Pipeline
 
-A Retrieval-Augmented Generation (RAG) system for analyzing Civil and Criminal legal case documents (PDFs). This system uses **MPNet** for embeddings and supports switching between various LLM backends (OpenAI, Anthropic, Gemini, LLaMA 3, Mistral) for answer generation. Metrics (ROUGE, BERTScore, BLEU) are automatically calculated for every run.
+A Retrieval-Augmented Generation (RAG) system designed to analyze and query Civil and Criminal legal case documents. This system leverages advanced Natural Language Processing (NLP) techniques to provide accurate context-aware answers from a large corpus of PDF documents.
 
-## 🚀 Features
+## Project Overview
 
-- **PDF Ingestion**: Recursively scans and parses PDFs from `PDF/CIVIL` and `PDF/CRIMINAL`.
-- **Hybrid Search**: Uses high-performance vector embeddings (`multi-qa-mpnet-base-cos-v1`).
-- **Flexible LLM Backend**: Switch instantly between:
-  - **Local Models**: LLaMA-3, Mistral, Phi-3 (via Ollama).
-  - **Cloud APIs**: GPT-4, GPT-3.5, Claude 3, Gemini 1.5 Pro.
-- **Advanced Metrics**: Automatically evaluates answers using ROUGE-L, METEOR, BLEU, BERTScore, and Cosine Similarity.
-- **Caching**: Embeddings are cached locally (`emb_cache/`) to speed up subsequent runs.
+This application processes legal documents (PDFs), generates vector embeddings for semantic search, and retrieves relevant context to answer user queries. It supports multiple Large Language Model (LLM) backends, allowing for flexibility in answer generation.
 
-## 🛠️ Prerequisites
+## Key Features
+
+- **PDF Ingestion**: Recursively scans and extracts text from PDFs located in `PDF/CIVIL` and `PDF/CRIMINAL` directories.
+- **Hybrid Search Architecture**: Utilizes `multi-qa-mpnet-base-cos-v1` for high-quality semantic embeddings.
+- **Cross-Platform Optimization**:
+  - **Linux/Mac**: Automatically uses parallel processing (multiprocessing) for rapid data ingestion.
+  - **Windows**: Automatically defaults to serial processing with robust crash recovery.
+- **Incremental Caching**: Implements a smart caching system (`emb_cache_v2/`) that hashes files based on content and modification time. This ensures that only new or modified files are processed in subsequent runs.
+- **Crash Recovery**: Saves progress after every single file during the embedding phase, preventing data loss during long processing tasks.
+- **Multi-Backend LLM Support**:
+  - Local Models: LLaMA 3, Mistral, Phi-3 (via Ollama).
+  - Cloud APIs: GPT-4, GPT-3.5, Claude 3, Gemini 1.5 Pro.
+- **Automated Metrics**: Calculates ROUGE-L, BLEU, METEOR, BERTScore, and Cosine Similarity for every generated answer to quantify performance.
+
+## Prerequisites
 
 - **Python 3.10+**
-- **Ollama** (for local models) installed and available in PATH.
+- **Ollama**: Required for running local LLMs. Ensure it is installed and running.
+- **Google Cloud Credentials (Optional)**: Required only if using the Google Drive Sync feature.
 
-## 📦 Installation
+## Installation
 
-1. **Clone the repository**
+1. **Clone the Repository**
 
    ```bash
-   git clone <repo-url>
+   git clone <repository_url>
    cd MAJOR_PROJECT
    ```
 
-2. **Create a Virtual Environment**
+2. **Set Up Virtual Environment**
 
    ```bash
    python -m venv venv
    # Windows
    venv\Scripts\activate
-   # Mac/Linux
+   # Linux/Mac
    source venv/bin/activate
    ```
 
@@ -42,64 +51,58 @@ A Retrieval-Augmented Generation (RAG) system for analyzing Civil and Criminal l
    pip install -r requirements.txt
    ```
 
-   _Note: First run might take time to download `torch` and transformer models._
-
-4. **Pull Local Models (Ollama)**
-   If you plan to use local LLMs, make sure your Ollama app is running and pull the models:
+4. **Prepare Local Models (Ollama)**
+   If using local models, pull them before running the script:
 
    ```bash
    ollama pull llama3:8b
    ollama pull mistral:7b
-   ollama pull phi3:mini
    ```
 
-5. **Set Up API Keys (Optional)**
-   If you want to use Cloud LLMs (OpenAI/Claude/Gemini) or Pinecone, rename `.env` and add your keys:
-   ```bash
-   # .env file
-   OPENAI_API_KEY=sk-...
-   ANTHROPIC_API_KEY=sk-ant-...
-   GOOGLE_API_KEY=AIza...
-   PINECONE_API_KEY=...
+5. **Configure Environment Variables**
+   Rename `.env` and populate it with your API keys if using cloud providers:
+   ```properties
+   OPENAI_API_KEY=your_key_here
+   ANTHROPIC_API_KEY=your_key_here
+   GOOGLE_API_KEY=your_key_here
    ```
 
-## 🏃 Usage
+## Usage
 
-Run the main script:
+Run the main application:
 
 ```bash
 python main.py
 ```
 
-### Steps:
+### Execution Flow
 
-1.  **Select Data**: The script will ask whether to process `civil`, `criminal`, or `both` types of PDFs.
-2.  **Date Filtering**: You can choose to process "ALL" years or specific ones (e.g., "2000, 2005-2008").
-3.  **LLM Selection**: Choose your desired backend from the menu:
-    - `1` GPT-4
-    - `4` LLaMA 3 (Local)
-    - `7` Gemini
-    - ...
-4.  **Results**: The system will retrieve context, generate an answer, and display a table of accuracy metrics.
-5.  **Logs**: A CSV file (e.g., `metrics_mpnet.csv`) containing detailed logs of the session is saved automatically.
+1.  **Data Selection**: Choose to process `civil`, `criminal`, or `both` directories.
+2.  **Processing**: The system checks for new files.
+    - On first run, it will extract and embed all PDFs.
+    - On subsequent runs, it loads vectors effectively from the cache.
+3.  **LLM Selection**: Select your desired model (e.g., LLaMA 3, GPT-4) from the menu.
+4.  **Querying**: The system runs predefined test queries (or you can modify the script to accept custom input) and displays the answer along with evaluation metrics.
 
-## 📂 Project Structure
+## Utilities
 
-```
-.
-├── PDF/                   # Place your PDF documents here (CIVIL/CRIMINAL folders)
-├── emb_cache/             # Stores generated embeddings (auto-created)
-├── main.py                # Main application logic
-├── requirements.txt       # Python dependencies
-├── .env                   # API keys configuration
-└── README.md              # Project documentation
-```
+### Google Drive Sync
 
-## ❓ Troubleshooting
+To download PDFs directly from a Google Drive folder:
 
-- **`ollama: command not found`**: Ensure Ollama is installed. On Windows, the default path is often `C:\Users\<user>\AppData\Local\Programs\Ollama\ollama.exe`. Add this to your System PATH or use the full path.
-- **`torch` errors**: If you have GPU availability issues, ensure you installed the correct PyTorch version for your CUDA driver.
+1.  Place your `credentials.json` (from Google Cloud Console) in the project root.
+2.  Edit `drive_sync.py` to add your generic Folder ID.
+3.  Run the script:
+    ```bash
+    python drive_sync.py
+    ```
 
-## 📜 License
+## Troubleshooting
 
-[Your License Here]
+- **Ollama Not Found**: The script attempts to auto-detect Ollama. If it fails, ensure `ollama` is in your system PATH.
+- **Parallel Processing Errors**: On Windows, the system defaults to serial mode to avoid `multiprocessing` spawn errors. Do not force parallel mode on Windows unless configured correctly.
+- **Missing Dependencies**: If `psutil` or other modules are missing, reinstall `requirements.txt`.
+
+## License
+
+This project is licensed for educational and research use.
