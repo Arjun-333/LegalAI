@@ -17,7 +17,7 @@ This application processes legal documents (PDFs), generates vector embeddings f
 - **Crash Recovery**: Saves progress after every single file during the embedding phase, preventing data loss during long processing tasks.
 - **Multi-Backend LLM Support**:
   - Local Models: LLaMA 3, Mistral, Phi-3 (via Ollama).
-  - Cloud APIs: GPT-4, GPT-3.5, Claude 3, Gemini 1.5 Pro.
+  - Cloud APIs: GPT-4, GPT-3.5, Claude 3, **Gemini 1.5 Pro**.
 - **Automated Metrics**: Calculates ROUGE-L, BLEU, METEOR, BERTScore, and Cosine Similarity for every generated answer to quantify performance.
 
 ## Prerequisites

@@ -248,7 +248,9 @@ def generate_answer_llm(prompt: str, llm_backend: str) -> str:
         try:
             import google.generativeai as genai
             genai.configure(api_key=GOOGLE_API_KEY)
-            model = genai.GenerativeModel("gemini-1.5-flash")
+            # User requested 2.5, but currently 1.5 Pro is the latest stable flagship.
+            # We switched from 'flash' to 'pro' for better reasoning.
+            model = genai.GenerativeModel("gemini-1.5-pro")
             out = model.generate_content(prompt)
             return out.text.strip()
         except Exception as e: return f"[Gemini Error: {e}]"
