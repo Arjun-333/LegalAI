@@ -1,4 +1,4 @@
-# Legal RAG Pipeline
+# Legal RAG Pipeline(ananya)
 
 A Retrieval-Augmented Generation (RAG) system designed to analyze and query Civil and Criminal legal case documents. This system leverages advanced Natural Language Processing (NLP) techniques to provide accurate context-aware answers from a large corpus of PDF documents.
 
