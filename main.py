@@ -242,16 +242,40 @@ def gather_pdfs(base: Path, folder="CIVIL", years=None, all_flag=True):
 def generate_answer_llm(prompt: str, llm_backend: str) -> str:
     prompt = prompt[:16000]
     
-    if llm_backend == "gemini":
-        GOOGLE_API_KEY = os.getenv("GOOGLE_API_KEY")
-        if not GOOGLE_API_KEY: return "[Error: GOOGLE_API_KEY missing]"
-        try:
-            import google.generativeai as genai
-            genai.configure(api_key=GOOGLE_API_KEY)
-            model = genai.GenerativeModel("gemini-1.5-flash")
-            out = model.generate_content(prompt)
-            return out.text.strip()
-        except Exception as e: return f"[Gemini Error: {e}]"
+   if llm_backend == "gemini":
+    GOOGLE_API_KEY = os.getenv("AIzaSyCzsaG2mKCG_nHBeyC1N29o8O1foCyJ7O0")
+    if not GOOGLE_API_KEY:
+        return "[Error: GOOGLE_API_KEY missing]"
+    try:
+        import google.generativeai as genai
+        genai.configure(api_key=GOOGLE_API_KEY)
+
+        # Gemini 1.5 Pro 
+        model = genai.GenerativeModel(
+            model_name="gemini-1.5-pro",
+            generation_config={
+                "temperature": 0.1,        
+                "top_p": 0.8,
+                "top_k": 40, 
+                "max_output_tokens": 1024  
+            }
+        )
+
+        response = model.generate_content(
+            prompt,
+            safety_settings={
+                "HARASSMENT": "block_none",
+                "HATE": "block_none",
+                "SEXUAL": "block_none",
+                "DANGEROUS": "block_none"
+            }
+        )
+
+        return response.text.strip()
+
+    except Exception as e:
+        return f"[Gemini Error: {e}]"
+
 
     if llm_backend in ["gpt4", "gpt35"]:
         try:
