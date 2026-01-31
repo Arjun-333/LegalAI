@@ -38,7 +38,7 @@ This application processes legal documents (PDFs), generates vector embeddings f
 2. **Set Up Virtual Environment**
 
    ```bash
-   python -m venv venv
+   python3 -m venv venv
    # Windows
    venv\Scripts\activate
    # Linux/Mac
